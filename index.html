@@ -1,0 +1,506 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Simulador de Frecuencias Alélicas — Selección, Mutación, Migración y Deriva</title>
+  <link rel="preconnect" href="https://cdn.jsdelivr.net" crossorigin>
+  <script src="https://cdn.jsdelivr.net/npm/seedrandom@3.0.5/seedrandom.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    :root { --bg:#0b1020; --card:#141a32; --ink:#eaf0ff; --muted:#9bb0ff; --accent:#6aa3ff; --ok:#00c853; --warn:#ffd54f; --bad:#ff5252; }
+    html,body{height:100%;}
+    body{margin:0;font-family:Inter,system-ui,-apple-system,Segoe UI,Roboto,Ubuntu,Cantarell,Arial,sans-serif;background:var(--bg);color:var(--ink);}    
+    .wrap{max-width:1200px;margin:24px auto;padding:0 16px;}
+    header{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-bottom:10px}
+    h1{font-size:24px;margin:0}
+    .sub{color:var(--muted);margin:0}
+    .grid{display:grid;grid-template-columns:1fr 340px;gap:16px}
+    @media (max-width: 1100px){.grid{grid-template-columns:1fr}}
+    .card{background:var(--card);border-radius:16px;box-shadow:0 10px 30px rgba(0,0,0,.3);padding:16px}
+    .controls{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}
+    .controls h3{grid-column: 1/-1;margin:8px 0;color:var(--muted);font-weight:700;letter-spacing:.2px}
+    label{font-size:12px;color:var(--muted);display:block;margin-bottom:6px}
+    input[type="number"], input[type="text"], select{width:100%;padding:10px 12px;border-radius:12px;border:1px solid #2a335a;background:#0f1530;color:var(--ink);outline:none}
+    input[type="checkbox"]{transform:scale(1.15)}
+    .row{display:flex;align-items:center;gap:10px}
+    .btn{background:linear-gradient(135deg,#3c6cff,#6aa3ff);color:white;border:0;border-radius:12px;padding:10px 14px;font-weight:600;cursor:pointer}
+    .btn.secondary{background:#27305a}
+    .btn.ghost{background:transparent;border:1px solid #2a335a}
+    .btn:disabled{opacity:.5;cursor:not-allowed}
+    .muted{color:var(--muted);font-size:12px}
+    .band-legend{display:flex;gap:12px;flex-wrap:wrap;margin-top:8px}
+    .pill{display:inline-flex;align-items:center;gap:6px;background:#0f1530;border:1px solid #27305a;border-radius:999px;padding:6px 10px;font-size:12px;color:#cdd7ff}
+    .dot{width:10px;height:10px;border-radius:999px;display:inline-block}
+    .dot.mean{background:#ffffff}
+    .dot.iqr{background:#90caf9}
+    .dot.p95{background:#bbdefb}
+    .two-col{display:grid;grid-template-columns:1fr 1fr;gap:8px}
+    .order{background:#0f1530;border:1px dashed #394277;border-radius:12px;padding:8px}
+    .order-item{display:flex;align-items:center;justify-content:space-between;gap:8px;background:#121a3a;border:1px solid #2a335a;border-radius:10px;padding:8px;margin:6px 0}
+    .order-item b{letter-spacing:.2px}
+    .order-item button{background:#26305a;color:#cdd7ff;border:0;border-radius:8px;padding:6px 8px;cursor:pointer}
+    .order-item button:disabled{opacity:.5}
+    .footer{display:flex;gap:8px;flex-wrap:wrap;margin-top:12px}
+    .hint{font-size:12px;color:#aab6ff;margin-top:8px}
+    canvas{background:#0f1530;border-radius:12px}
+    .small{font-size:11px;color:#9bb0ff}
+
+    /* ===== Manual modal ===== */
+    .help-trigger{display:flex;align-items:center;gap:8px}
+    .help-trigger .kbd{font-size:12px;padding:4px 8px;border-radius:8px;background:#0f1530;border:1px solid #27305a;color:#cdd7ff}
+    .modal-backdrop{position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(2px);display:none}
+    .modal{position:fixed;inset:40px 24px;background:#0b1020;border:1px solid #2a335a;border-radius:16px;box-shadow:0 25px 80px rgba(0,0,0,.6);display:none;overflow:hidden}
+    .modal header{display:flex;align-items:center;justify-content:space-between;padding:14px 16px;border-bottom:1px solid #27305a}
+    .modal h2{margin:0;font-size:18px}
+    .modal .content{display:grid;grid-template-columns:260px 1fr;height:calc(100% - 56px)}
+    .manual-nav{background:#0f1530;border-right:1px solid #27305a;padding:10px;overflow:auto}
+    .manual-nav button{width:100%;text-align:left;border:0;background:transparent;color:#cdd7ff;padding:10px;border-radius:10px;cursor:pointer}
+    .manual-nav button.active{background:#151b3a;border:1px solid #2a335a}
+    .manual-body{padding:16px;overflow:auto}
+    .manual-body h3{margin:8px 0;color:#dfe6ff}
+    .badge{display:inline-block;padding:2px 8px;border-radius:999px;border:1px solid #394277;background:#121a3a;color:#cdd7ff;font-size:11px}
+    .callout{border-left:3px solid #6aa3ff;background:#0f1530;border:1px solid #27305a;border-left-color:#6aa3ff;padding:10px;border-radius:8px;margin:10px 0}
+    .grid-2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .kbd{font-family:ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace}
+    .chip{display:inline-flex;gap:6px;align-items:center;background:#121a3a;border:1px solid #2a335a;border-radius:999px;padding:4px 8px;font-size:12px;color:#cdd7ff}
+    .chip .dot{width:8px;height:8px}
+    .soft{color:#cdd7ff}
+    .ok{color:var(--ok)} .warn{color:var(--warn)} .bad{color:var(--bad)}
+    @media (max-width: 920px){.modal .content{grid-template-columns:1fr}}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <div>
+        <h1>Simulador de Frecuencias Alélicas</h1>
+	<h2 class="author">Por Nelson Cala Moreno PhD.</h2>
+        <p class="sub">Modelo diploide: <strong>Selección</strong>, <strong>Mutación</strong>, <strong>Migración</strong> y <strong>Deriva (Wright–Fisher)</strong></p>
+      </div>
+      <div class="help-trigger">
+        <button id="helpBtn" class="btn ghost">📘 Manual</button>
+        <span class="kbd">p05–p95 = percentiles</span>
+      </div>
+    </header>
+
+    <div class="grid">
+      <div class="card">
+        <canvas id="chart" height="420"></canvas>
+        <div class="band-legend">
+          <span class="pill"><span class="dot mean"></span> Media</span>
+          <span class="pill"><span class="dot iqr"></span> Banda 25–75% (p25–p75)</span>
+          <span class="pill"><span class="dot p95"></span> Banda 5–95% (p05–p95)</span>
+        </div>
+        <p class="hint">Las bandas muestran la variación entre <em>repeticiones</em> por deriva. La media refleja el efecto conjunto de fuerzas deterministas.</p>
+      </div>
+
+      <div class="card">
+        <div class="controls">
+          <h3>Parámetros básicos</h3>
+          <div>
+            <label>p₀ (frecuencia inicial de A) [0–1]</label>
+            <input id="p0" type="number" min="0" max="1" step="0.01" value="0.1" />
+          </div>
+          <div>
+            <label>Generaciones</label>
+            <input id="gens" type="number" min="1" max="1000" step="1" value="100" />
+          </div>
+          <div>
+            <label>Repeticiones (trayectorias)</label>
+            <input id="reps" type="number" min="10" max="1500" step="10" value="300" />
+          </div>
+          <div>
+            <label>Semilla (opcional). Vacío = aleatoria cada vez.</label>
+            <input id="seed" type="text" placeholder="ej. 123" value="" />
+          </div>
+
+          <h3>Mutación</h3>
+          <div class="row">
+            <div style="flex:1">
+              <label>μ (a → A)</label>
+              <input id="mu" type="number" step="any" min="0" value="0" />
+            </div>
+            <div style="flex:1">
+              <label>ν (A → a)</label>
+              <input id="nu" type="number" step="any" min="0" value="0" />
+            </div>
+            <div class="row" style="gap:6px;margin-top:22px">
+              <input id="noMut" type="checkbox" />
+              <label for="noMut">Sin mutación</label>
+            </div>
+          </div>
+
+          <h3>Selección</h3>
+          <div class="row">
+            <div style="flex:1">
+              <label>s (ventaja de AA vs aa)</label>
+              <input id="s" type="number" step="any" value="0.05" />
+            </div>
+            <div style="flex:1">
+              <label>h (dominancia: 0 rec, 0.5 adit, 1 dom)</label>
+              <input id="h" type="number" step="0.05" min="0" max="1" value="0.5" />
+            </div>
+            <div class="row" style="gap:6px;margin-top:22px">
+              <input id="noSel" type="checkbox" />
+              <label for="noSel">Sin selección</label>
+            </div>
+          </div>
+
+          <h3>Migración</h3>
+          <div class="row">
+            <div style="flex:1">
+              <label>m (proporción de migrantes)</label>
+              <input id="m" type="number" step="any" min="0" max="1" value="0" />
+            </div>
+            <div style="flex:1">
+              <label>p<sub>m</sub> (frecuencia fuente)</label>
+              <input id="pm" type="number" step="0.01" min="0" max="1" value="0.8" />
+            </div>
+            <div class="row" style="gap:6px;margin-top:22px">
+              <input id="noMig" type="checkbox" />
+              <label for="noMig">Sin migración</label>
+            </div>
+          </div>
+
+          <h3>Deriva genética</h3>
+          <div class="row">
+            <div style="flex:1">
+              <label>N<sub>e</sub> (tamaño efectivo; ∞ = sin deriva)</label>
+              <input id="Ne" type="number" step="1" min="1" value="200" />
+            </div>
+            <div class="row" style="gap:6px;margin-top:22px">
+              <input id="noDrift" type="checkbox" />
+              <label for="noDrift">Sin deriva</label>
+            </div>
+          </div>
+
+          <h3>Orden de aplicación</h3>
+          <div class="order" id="orderBox">
+            <div class="order-item"><b>Mutación</b><span class="small">(μ, ν)</span><span><button data-up>↑</button><button data-down>↓</button></span></div>
+            <div class="order-item"><b>Selección</b><span class="small">(s, h)</span><span><button data-up>↑</button><button data-down>↓</button></span></div>
+            <div class="order-item"><b>Migración</b><span class="small">(m, p<sub>m</sub>)</span><span><button data-up>↑</button><button data-down>↓</button></span></div>
+            <div class="order-item"><b>Deriva</b><span class="small">(Wright–Fisher)</span><span><button data-up>↑</button><button data-down>↓</button></span></div>
+          </div>
+
+          <div class="footer">
+            <button id="run" class="btn">Simular</button>
+            <button id="toggleTraj" class="btn secondary">Mostrar 20 trayectorias</button>
+            <button id="exportCSV" class="btn secondary">Exportar CSV</button>
+          </div>
+          <div id="msg" class="muted" style="margin-top:8px"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Manual Modal ===== -->
+  <div id="helpBackdrop" class="modal-backdrop"></div>
+  <div id="helpModal" class="modal" role="dialog" aria-modal="true" aria-labelledby="helpTitle">
+    <header>
+      <h2 id="helpTitle">Manual de Usuario</h2>
+      <button id="helpClose" class="btn ghost">✕ Cerrar</button>
+    </header>
+    <div class="content">
+      <nav class="manual-nav" aria-label="Secciones del manual">
+        <button data-tab="intro" class="active">1. Interpretación de la gráfica</button>
+        <button data-tab="params">2. Parámetros</button>
+        <button data-tab="esc">3. Escenarios prácticos</button>
+        <button data-tab="tips">4. Consejos y rendimiento</button>
+      </nav>
+      <section class="manual-body">
+        <div data-pane="intro">
+          <h3>Interpretación de la gráfica</h3>
+          <p>
+            La línea <strong>Media</strong> resume el promedio de todas las repeticiones.
+            Las bandas sombreadas indican percentiles:
+          </p>
+          <div class="grid-2">
+            <div class="callout">
+              <p><span class="chip"><span class="dot iqr"></span> p25–p75</span> = 50% central (intervalo intercuartílico).</p>
+              <p><span class="chip"><span class="dot p95"></span> p05–p95</span> = 90% de las trayectorias.</p>
+            </div>
+            <div class="callout">
+              <p><strong>p25</strong>: 25% de simulaciones ≤ este valor; <strong>p75</strong>: 75% ≤ este valor.</p>
+              <p><strong>p05</strong> y <strong>p95</strong>: límites que abarcan el 90% de resultados.</p>
+            </div>
+          </div>
+          <p>Activa <em>Mostrar 20 trayectorias</em> para ver ejemplos individuales (variación estocástica por deriva).</p>
+        </div>
+
+        <div data-pane="params" hidden>
+          <h3>Parámetros</h3>
+          <ul>
+            <li><strong>p₀</strong>: frecuencia inicial (0–1).</li>
+            <li><strong>Generaciones</strong> y <strong>Repeticiones</strong>: tamaño temporal y número de trayectorias.</li>
+            <li><strong>Semilla</strong>: vacío → aleatoria en cada corrida; número → reproducible.</li>
+          </ul>
+          <h4>Mutación <span class="badge">μ, ν</span></h4>
+          <p>Probabilidades por generación. <em>Sin mutación</em> fija μ=ν=0.</p>
+          <h4>Selección <span class="badge">s, h</span></h4>
+          <p>Ventaja de AA y dominancia (0 rec, 0.5 adit, 1 dom). <em>Sin selección</em> fija s=0.</p>
+          <h4>Migración <span class="badge">m, pₘ</span></h4>
+          <p>Proporción de migrantes y frecuencia fuente. <em>Sin migración</em> fija m=0.</p>
+          <h4>Deriva <span class="badge">Nₑ</span></h4>
+          <p>Menor Nₑ ⇒ mayor azar. <em>Sin deriva</em> equivale a Nₑ = ∞.</p>
+          <h4>Orden</h4>
+          <p>Reordena fuerzas con ↑/↓; el orden altera la actualización por generación.</p>
+        </div>
+
+        <div data-pane="esc" hidden>
+          <h3>Escenarios prácticos</h3>
+          <ol>
+            <li><strong>Ninguna fuerza</strong>: marca <em>Sin mutación, Sin selección, Sin migración, Sin deriva</em>. → línea recta.</li>
+            <li><strong>Solo mutación</strong>: desmarca <em>Sin mutación</em>, usa μ>0 (p. ej. 1e-4) y/o ν>0; deja las demás “Sin…”.</li>
+            <li><strong>Solo selección</strong>: desmarca <em>Sin selección</em>, pon s=0.05 (h=0.5); demás “Sin…”.</li>
+            <li><strong>Solo migración</strong>: desmarca <em>Sin migración</em>, pon m=0.05 y pₘ=0.8; demás “Sin…”.</li>
+            <li><strong>Solo deriva</strong>: desmarca <em>Sin deriva</em>, usa Nₑ=50; demás “Sin…”.</li>
+            <li><strong>Todas las fuerzas</strong>: desmarca todas las “Sin…”. Ej.: μ=1e-5, ν=1e-5, s=0.03, h=0.5, m=0.02, pₘ=0.8, Nₑ=200.</li>
+          </ol>
+        </div>
+
+        <div data-pane="tips" hidden>
+          <h3>Consejos y rendimiento</h3>
+          <ul>
+            <li><span class="ok">✔</span> Prueba primero escenarios simples; luego combina fuerzas.</li>
+            <li><span class="warn">△</span> Con Nₑ grande y muchas repeticiones, puede tardar (se avisa en el mensaje).</li>
+            <li><span class="bad">✖</span> Si p₀, pₘ o m quedan fuera de [0,1], se recortan automáticamente.</li>
+            <li>El mensaje inferior muestra la <strong>Semilla usada</strong> para reproducibilidad.</li>
+          </ul>
+        </div>
+      </section>
+    </div>
+  </div>
+
+<script>
+// ========= Utilidades =========
+function clamp01(x){ return Math.max(0, Math.min(1, x)); }
+function quantile(arr, q){
+  if(!arr.length) return NaN;
+  const a = arr.slice().sort((x,y)=>x-y);
+  const pos = (a.length - 1) * q;
+  const base = Math.floor(pos), rest = pos - base;
+  if(a[base+1] !== undefined){ return a[base] + rest*(a[base+1]-a[base]); }
+  return a[base];
+}
+
+function randn(){ let u=0, v=0; while(u===0) u=Math.random(); while(v===0) v=Math.random();
+  return Math.sqrt(-2*Math.log(u))*Math.cos(2*Math.PI*v);
+}
+function rbinom(n, p){
+  if(!isFinite(n) || n<=0) return 0;
+  if(n <= 1000){ let k=0; for(let i=0;i<n;i++){ if(Math.random()<p) k++; } return k; }
+  const mu = n*p, sigma = Math.sqrt(n*p*(1-p));
+  let k = Math.round(mu + sigma*randn());
+  if(k < 0) k = 0; if(k > n) k = n; return k;
+}
+
+// ========= Dinámica por fuerzas =========
+function stepMutation(p, mu, nu){ return clamp01(p*(1-nu) + (1-p)*mu); }
+function stepSelection(p, s, h){
+  const wAA = 1 + s, wAa = 1 + h*s, waa = 1;
+  const p2 = p*p, q = 1-p, q2 = q*q, two_pq = 2*p*q;
+  const wbar = p2*wAA + two_pq*wAa + q2*waa;
+  const psel = (p2*wAA + 0.5*two_pq*wAa) / wbar;
+  return clamp01(psel);
+}
+function stepMigration(p, m, pm){ return clamp01((1-m)*p + m*pm); }
+function stepDrift(p, Ne){
+  if(!isFinite(Ne)) return p;
+  const n = Math.max(1, Math.round(2*Ne));
+  const k = rbinom(n, p);
+  return clamp01(k / n);
+}
+
+// ========= Simulador principal =========
+function simulate({p0, gens, reps, mu, nu, s, h, m, pm, Ne, order, seed}){
+  const seedStr = (seed===undefined || String(seed).trim()==='') ? String(Date.now() + Math.random()) : String(seed);
+  Math.seedrandom(seedStr);
+
+  const P = Array.from({length: gens+1}, ()=>Array(reps).fill(NaN));
+  for(let r=0;r<reps;r++) P[0][r]=p0;
+  for(let r=0;r<reps;r++){
+    let p = p0;
+    for(let g=1; g<=gens; g++){
+      for(const st of order){
+        if(st==='mutation')  p = stepMutation(p, mu, nu);
+        else if(st==='selection') p = stepSelection(p, s, h);
+        else if(st==='migration') p = stepMigration(p, m, pm);
+        else if(st==='drift')     p = stepDrift(p, Ne);
+      }
+      P[g][r] = p;
+    }
+  }
+  const summary = [];
+  for(let g=0; g<=gens; g++){
+    const arr = P[g];
+    summary.push({ gen:g, mean: arr.reduce((a,b)=>a+b,0)/reps,
+                   p05: quantile(arr,0.05), p25: quantile(arr,0.25), p75: quantile(arr,0.75), p95: quantile(arr,0.95) });
+  }
+  return { P, summary, usedSeed: seedStr };
+}
+
+// ========= UI y Gráfico =========
+const ctx = document.getElementById('chart').getContext('2d');
+let chart = null; let showTraj = false;
+
+function getOrder(){
+  const names = Array.from(document.querySelectorAll('#orderBox .order-item b')).map(b=>b.textContent.trim());
+  return names.map(n=>({'Mutación':'mutation','Selección':'selection','Migración':'migration','Deriva':'drift'}[n]));
+}
+function setupReorder(){
+  const box = document.getElementById('orderBox');
+  box.addEventListener('click', (e)=>{
+    const btnUp = e.target.closest('button[data-up]');
+    const btnDown = e.target.closest('button[data-down]');
+    const item = e.target.closest('.order-item');
+    if(btnUp){ const prev = item.previousElementSibling; if(prev) box.insertBefore(item, prev); }
+    if(btnDown){ const next = item.nextElementSibling; if(next) box.insertBefore(next, item); }
+  });
+}
+setupReorder();
+
+function readParams(){
+  const val = id=>document.getElementById(id).value;
+  const noMut = document.getElementById('noMut').checked;
+  const noSel = document.getElementById('noSel').checked;
+  const noMig = document.getElementById('noMig').checked;
+  const noDrift = document.getElementById('noDrift').checked;
+
+  let mu = parseFloat(val('mu'))||0;
+  let nu = parseFloat(val('nu'))||0;
+  let s  = parseFloat(val('s'))||0;
+  let h  = parseFloat(val('h'));
+  let m  = parseFloat(val('m'))||0;
+  let pm = parseFloat(val('pm'));
+  let Ne = noDrift ? Infinity : parseFloat(val('Ne'));
+
+  if(noMut){ mu = 0; nu = 0; }
+  if(noSel){ s  = 0; }
+  if(noMig){ m  = 0; }
+
+  const p = {
+    p0: clamp01(parseFloat(val('p0'))),
+    gens: parseInt(val('gens')),
+    reps: parseInt(val('reps')),
+    mu, nu, s, h, m, pm: clamp01(pm),
+    Ne: (!isFinite(Ne) && !noDrift) ? 200 : Ne,
+    order: getOrder(),
+    seed: val('seed')
+  };
+  p.h = Math.max(0, Math.min(1, p.h));
+  p.m = Math.max(0, Math.min(1, p.m));
+  return p;
+}
+
+function warnPerf({gens,reps,Ne}){
+  const msg = document.getElementById('msg');
+  const n = isFinite(Ne) ? (2*Ne) : 0;
+  let warn = '';
+  if(gens*reps > 300000) warn += 'Ejecutando una simulación grande; puede demorar. ';
+  if(isFinite(Ne) && n>2000 && reps*gens > 150000) warn += 'Usando aproximación normal para la binomial (n > 1000). ';
+  msg.textContent = warn;
+}
+
+function toDataset(label, data, options={}){ return Object.assign({ label, data, tension:0.25, pointRadius:0, borderWidth:2 }, options); }
+
+function render(res, params){
+  const xs = res.summary.map(d=>d.gen);
+  const mean = res.summary.map(d=>d.mean);
+  const p25 = res.summary.map(d=>d.p25);
+  const p75 = res.summary.map(d=>d.p75);
+  const p05 = res.summary.map(d=>d.p05);
+  const p95 = res.summary.map(d=>d.p95);
+
+  const extraDatasets = [];
+  if(showTraj){
+    const sample = Math.min(20, params.reps);
+    const idxs = Array.from({length: params.reps}, (_,i)=>i).sort(()=>Math.random()-0.5).slice(0,sample);
+    for(const i of idxs){
+      const series = res.P.map(row=>row[i]);
+      extraDatasets.push(toDataset(`Trayectoria ${i+1}`, series, {borderWidth:1, borderColor:'rgba(255,255,255,0.35)', pointRadius:0, hidden:false}));
+    }
+  }
+
+  const datasets = [
+    toDataset('p95', p95, {borderColor:'rgba(187,222,251,0.0)', backgroundColor:'rgba(187,222,251,0.35)', fill:'-1'}),
+    toDataset('p05', p05, {borderColor:'rgba(187,222,251,0.0)'}),
+    toDataset('p75', p75, {borderColor:'rgba(144,202,249,0.0)', backgroundColor:'rgba(144,202,249,0.45)', fill:'-1'}),
+    toDataset('p25', p25, {borderColor:'rgba(144,202,249,0.0)'}),
+    toDataset('Media', mean, {borderColor:'#ffffff'})
+  ].concat(extraDatasets);
+
+  if(chart){ chart.destroy(); }
+  chart = new Chart(ctx, {
+    type: 'line',
+    data: { labels: xs, datasets },
+    options: {
+      responsive: true,
+      interaction: { mode:'index', intersect:false },
+      plugins: {
+        legend: { labels:{ color:'#dfe6ff' } },
+        tooltip: { callbacks:{ label:(ctx)=>`${ctx.dataset.label}: ${ctx.parsed.y.toFixed(4)}` } }
+      },
+      scales: {
+        x: { ticks:{ color:'#b9c6ff' }, grid:{ color:'rgba(255,255,255,0.06)' }, title:{ display:true, text:'Generaciones', color:'#b9c6ff' } },
+        y: { min:0, max:1, ticks:{ color:'#b9c6ff' }, grid:{ color:'rgba(255,255,255,0.06)' }, title:{ display:true, text:'Frecuencia del alelo A (p)', color:'#b9c6ff' } }
+      }
+    }
+  });
+
+  const msg = document.getElementById('msg');
+  const used = res.usedSeed;
+  msg.textContent = (msg.textContent? msg.textContent+' ' : '') + `Semilla usada: ${used}`;
+}
+
+function toggleDisableByCheckbox(checkboxId, inputIds){
+  const cb = document.getElementById(checkboxId);
+  function setState(){ for(const id of inputIds){ const el = document.getElementById(id); el.disabled = cb.checked; } }
+  cb.addEventListener('change', setState); setState();
+}
+
+function run(){ const params = readParams(); warnPerf(params); const res = simulate(params); render(res, params); }
+
+// Eventos UI
+const btnRun = document.getElementById('run');
+btnRun.addEventListener('click', ()=>{ btnRun.disabled=true; setTimeout(()=>{ run(); btnRun.disabled=false; }, 10); });
+
+document.getElementById('toggleTraj').addEventListener('click', (e)=>{ showTraj = !showTraj; e.target.textContent = showTraj ? 'Ocultar trayectorias' : 'Mostrar 20 trayectorias'; if(chart) document.getElementById('run').click(); });
+
+document.getElementById('noDrift').addEventListener('change', (e)=>{ const Ne = document.getElementById('Ne'); Ne.disabled = e.target.checked; if(e.target.checked){ Ne.value = 200; } });
+
+toggleDisableByCheckbox('noMut', ['mu','nu']);
+toggleDisableByCheckbox('noSel', ['s','h']);
+toggleDisableByCheckbox('noMig', ['m','pm']);
+
+document.getElementById('exportCSV').addEventListener('click', ()=>{
+  const params = readParams(); const res = simulate(params);
+  let csv = 'gen,mean,p05,p25,p75,p95\n';
+  for(const r of res.summary){ csv += `${r.gen},${r.mean},${r.p05},${r.p25},${r.p75},${r.p95}\n`; }
+  if(showTraj){
+    const sample = Math.min(20, params.reps);
+    const idxs = Array.from({length: params.reps}, (_,i)=>i).slice(0,sample);
+    for(const i of idxs){ csv += `\n# Trayectoria ${i+1}\n`; csv += 'gen,p\n'; for(let g=0; g<=params.gens; g++) csv += `${g},${res.P[g][i]}\n`; }
+  }
+  const blob = new Blob([csv], {type:'text/csv;charset=utf-8;'}); const url = URL.createObjectURL(blob);
+  const a = document.createElement('a'); a.href = url; a.download = 'simulacion_frecuencias.csv'; a.click(); URL.revokeObjectURL(url);
+});
+
+// ===== Manual modal logic =====
+const helpBtn = document.getElementById('helpBtn');
+const helpClose = document.getElementById('helpClose');
+const helpModal = document.getElementById('helpModal');
+const helpBackdrop = document.getElementById('helpBackdrop');
+function openHelp(){ helpBackdrop.style.display='block'; helpModal.style.display='block'; }
+function closeHelp(){ helpBackdrop.style.display='none'; helpModal.style.display='none'; }
+helpBtn.addEventListener('click', openHelp); helpClose.addEventListener('click', closeHelp); helpBackdrop.addEventListener('click', closeHelp);
+
+const tabs = document.querySelectorAll('.manual-nav button');
+const panes = document.querySelectorAll('.manual-body [data-pane]');
+tabs.forEach(btn=>btn.addEventListener('click',()=>{ tabs.forEach(b=>b.classList.remove('active')); btn.classList.add('active'); const name = btn.dataset.tab; panes.forEach(p=>{ p.hidden = p.dataset.pane!==name; }); }));
+
+// Run inicial
+run();
+</script>
+</body>
+</html>
